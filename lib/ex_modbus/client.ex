@@ -80,6 +80,7 @@ defmodule ExModbus.Client do
     end
   end
 
+  def disconnect(info, %{socket: nil} = s), do: {:connect, :reconnect, s}
   def disconnect(info, %{socket: socket} = s) do
     :ok = :gen_tcp.close(socket)
     case info do
