@@ -26,9 +26,23 @@ defmodule ExModbus.Client do
     Connection.call(pid, {:read_holding_registers, %{unit_id: unit_id, start_address: start_address, count: count}})
   end
 
+
   def read_coils(pid, unit_id, start_address, count) do
     Connection.call(pid, {:read_coils, %{unit_id: unit_id, start_address: start_address, count: count}})
   end
+
+  def read_discrete_inputs(pid, unit_id, start_address, count) do
+    Connection.call(pid, {:read_discrete_inputs, %{unit_id: unit_id, start_address: start_address, count: count}})
+  end
+  
+  def read_input_registers(pid, unit_id, start_address, count) do
+    Connection.call(pid, {:read_input_registers, %{unit_id: unit_id, start_address: start_address, count: count}})
+  end
+  
+  def read_holding_registers(pid, unit_id, start_address, count) do
+    Connection.call(pid, {:read_holding_registers, %{unit_id: unit_id, start_address: start_address, count: count}})
+  end
+  
 
   @doc """
   Write a single coil at address. Possible states are `:on` and `:off`.
@@ -49,8 +63,12 @@ defmodule ExModbus.Client do
 
 
   def generic_call(pid, unit_id, {call, address, count, transform}) do
-    %{data: {_type, data}} = Connection.call(pid, {call, %{unit_id: unit_id, start_address: address, count: count}})
-    transform.(data)
+      case Connection.call(pid, {call, %{unit_id: unit_id, start_address: address, count: count}}) do
+          :closed -> :closed
+          %{data: {_type, data}} -> transform.(data)
+           {:error, err} -> err
+      end
+    
   end
 
   ## Connection Callbacks
@@ -112,10 +130,35 @@ defmodule ExModbus.Client do
                |> send_and_rcv_packet(state)
 
     response = case response do
-      {:reply, device_response} ->
+      {:reply, %{data: {:read_coils, _}} = device_response} ->
         {:reply, limit_to_count.(device_response)}
       _ -> response
     end
+    Tuple.append response, state
+  end
+
+  def handle_call({:read_discrete_inputs, %{unit_id: unit_id, start_address: address, count: count}}, _from, state) do
+    # limits the number of digits returned to the number `count` from the request
+    limit_to_count = fn msg ->
+                        {:read_discrete_inputs, lst} = msg.data
+                        {_, elems} = Enum.split(lst, -count)
+                        %{msg | data: {:read_discrete_inputs, elems}}
+    end
+    response = Modbus.Packet.read_discrete_inputs(address, count)
+               |> Modbus.Tcp.wrap_packet(unit_id)
+               |> send_and_rcv_packet(state)
+    response = case response do
+      {:reply, %{data: {:read_discrete_inputs, _}} = device_response} ->
+          {:reply, limit_to_count.(device_response)}
+      _ -> response
+    end
+    Tuple.append response, state
+  end
+
+  def handle_call({:read_input_registers, %{unit_id: unit_id, start_address: address, count: count}}, _from, state) do
+    response = Modbus.Packet.read_input_registers(address, count)
+               |> Modbus.Tcp.wrap_packet(unit_id)
+               |> send_and_rcv_packet(state)
     Tuple.append response, state
   end
 

@@ -7,15 +7,18 @@ defmodule Modbus.Packet do
   @read_coils                         0x01
   @read_coils_exception               0x81
   @read_discrete_inputs               0x02
+  @read_discrete_inputs_exception     0x82
   @read_holding_registers             0x03
   @read_holding_registers_exception   0x83
   @read_input_registers               0x04
+  @read_input_registers_exception     0x84
 
   @write_single_coil                  0x05
   @write_single_coil_exception        0x85
   @write_single_register              0x06
   @write_single_register_exception    0x86
   @write_multiple_coils               0x0f
+  @write_multiple_coils_exception     0x8f
   @write_multiple_registers           0x10
   @write_multiple_registers_exception 0x90
 
@@ -114,6 +117,15 @@ defmodule Modbus.Packet do
   @doc """
   Parse a ModbusTCP response packet
   """
+  def parse_response_packet(<<@read_input_registers, _byte_count, data::binary>>) do
+    value_list = for <<value::size(16)-big <- data>>, do: value
+    {:ok, {:read_input_registers, value_list}}
+  end
+
+  def parse_response_packet(<<@read_input_registers_exception, exception>>) do
+    {:ok, {:read_input_registers_exception, exception_code(exception)}}
+  end
+
   def parse_response_packet(<<@read_holding_registers, _byte_count, data::binary>>) do
     value_list = for <<value::size(16)-big <- data>>, do: value
     {:ok, {:read_holding_registers, value_list}}
@@ -137,6 +149,22 @@ defmodule Modbus.Packet do
 
   def parse_response_packet(<<@read_coils_exception, exception>>) do
     {:ok, {:read_coils_exception, exception_code(exception)}}
+  end
+
+  def parse_response_packet(<<@read_discrete_inputs, _byte_count, data::binary>>) do
+    status_list = 
+      for <<byte <- data>> do
+        for <<bit::size(1) <- <<byte>> >> do
+          if bit == 1, do: :on, else: :off
+        end
+      end
+      |> Enum.reverse()
+      |> List.flatten()
+    {:ok, {:read_discrete_inputs, status_list}}
+  end
+
+  def parse_response_packet(<<@read_discrete_inputs_exception, exception>>) do
+    {:ok, {:read_discrete_inputs_exception, exception_code(exception)}}
   end
 
   def parse_response_packet(<<@write_single_coil, _::size(16), data::size(16)>>) do
