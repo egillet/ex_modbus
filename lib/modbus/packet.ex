@@ -105,9 +105,24 @@ defmodule Modbus.Packet do
     end
   end
 
+  def write_multiple_coils(starting_address, data) do
+    {val, nb} = List.foldr(data, {0,0}, fn s, {acc, acc_nb} -> 
+        {acc * 2 + (if s==:on, do: 1, else: 0), acc_nb+1 }
+    end)
+    n_bytes = div(nb+7, 8)
+    val_size = n_bytes * 8
+     <<@write_multiple_coils, starting_address::size(16)-big, nb::size(16)-big, n_bytes::size(8), val::size(val_size)-little>>
+  end
 
   def write_single_register(starting_address, data) do
     write_single(@write_single_register, starting_address, data)
+  end
+
+  def write_multiple_registers(starting_address, data) when is_list(data) do
+    {w_data, nb} = List.foldl(data, {<<>>, 0}, fn n, {acc, acc_nb} -> 
+        {acc <> <<n::size(16)-big>>, acc_nb + 1}
+    end)
+    write_multiple(@write_multiple_registers, starting_address, nb, w_data)
   end
 
   def write_multiple_registers(starting_address, data) do
@@ -137,13 +152,13 @@ defmodule Modbus.Packet do
 
   def parse_response_packet(<<@read_coils, _byte_count, data::binary>>) do
     status_list = 
-      for <<byte <- data>> do
-        for <<bit::size(1) <- <<byte>> >> do
-          if bit == 1, do: :on, else: :off
+        for <<byte <- data>> do
+          for <<bit::size(1) <- <<byte>> >> do
+            if bit == 1, do: :on, else: :off
+          end
+          |> Enum.reverse()
         end
-      end
-      |> Enum.reverse()
-      |> List.flatten()
+        |> List.flatten()
     {:ok, {:read_coils, status_list}}
   end
 
@@ -153,13 +168,13 @@ defmodule Modbus.Packet do
 
   def parse_response_packet(<<@read_discrete_inputs, _byte_count, data::binary>>) do
     status_list = 
-      for <<byte <- data>> do
-        for <<bit::size(1) <- <<byte>> >> do
-          if bit == 1, do: :on, else: :off
+        for <<byte <- data>> do
+          for <<bit::size(1) <- <<byte>> >> do
+            if bit == 1, do: :on, else: :off
+          end
+          |> Enum.reverse()
         end
-      end
-      |> Enum.reverse()
-      |> List.flatten()
+        |> List.flatten()
     {:ok, {:read_discrete_inputs, status_list}}
   end
 
@@ -179,7 +194,7 @@ defmodule Modbus.Packet do
     {:ok, {:write_single_coil_exception, exception_code(exception)}}
   end
 
-  def parse_response_packet(<<@write_single_register, _size, data::binary>>) do
+  def parse_response_packet(<<@write_single_register, _address::size(16), data::size(16)-big>>) do
     {:ok, {:write_single_register, data}}
   end
 
@@ -187,8 +202,16 @@ defmodule Modbus.Packet do
     {:ok, {:write_single_register_exception, exception_code(exception)}}
   end
 
-  def parse_response_packet(<<@write_multiple_registers, _size, data::binary>>) do
-    {:ok, {:write_multiple_registers, data}}
+  def parse_response_packet(<<@write_multiple_coils, _address::size(16), count::size(16)-big>>) do
+    {:ok, {:write_multiple_coils, count}}
+  end
+
+  def parse_response_packet(<<@write_multiple_coils_exception, exception>>) do
+    {:ok, {:write_multiple_coils_exception, exception_code(exception)}}
+  end
+
+  def parse_response_packet(<<@write_multiple_registers, _address::size(16), count::size(16)-big>>) do
+    {:ok, {:write_multiple_registers, count}}
   end
 
   def parse_response_packet(<<@write_multiple_registers_exception, exception>>) do

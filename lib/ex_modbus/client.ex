@@ -51,6 +51,9 @@ defmodule ExModbus.Client do
     Connection.call(pid, {:write_single_coil, %{unit_id: unit_id, start_address: address, state: state}})
   end
 
+  def write_multiple_coils(pid, unit_id, address, state) do
+    Connection.call(pid, {:write_multiple_coils, %{unit_id: unit_id, start_address: address, state: state}})
+  end
 
   def write_single_register(pid, unit_id, address, data) do
     Connection.call(pid, {:write_single_register, %{unit_id: unit_id, start_address: address, state: data}})
@@ -62,13 +65,20 @@ defmodule ExModbus.Client do
   end
 
 
+  def generic_call(pid, unit_id, {call, address, data}) do
+      case Connection.call(pid, {call, %{unit_id: unit_id, start_address: address, state: data}}) do
+          :closed -> :closed
+          %{data: {_type, res}} -> res
+           {:error, err} -> err
+      end
+  end
+
   def generic_call(pid, unit_id, {call, address, count, transform}) do
       case Connection.call(pid, {call, %{unit_id: unit_id, start_address: address, count: count}}) do
           :closed -> :closed
           %{data: {_type, data}} -> transform.(data)
            {:error, err} -> err
       end
-    
   end
 
   ## Connection Callbacks
@@ -122,8 +132,7 @@ defmodule ExModbus.Client do
     # limits the number of coils returned to the number `count` from the request
     limit_to_count = fn msg ->
                         {:read_coils, lst} = msg.data
-                        {_, elems} = Enum.split(lst, -count)
-                        %{msg | data: {:read_coils, elems}}
+                        %{msg | data: {:read_coils, Enum.take(lst, count)}}
     end
     response = Modbus.Packet.read_coils(address, count)
                |> Modbus.Tcp.wrap_packet(unit_id)
@@ -141,8 +150,7 @@ defmodule ExModbus.Client do
     # limits the number of digits returned to the number `count` from the request
     limit_to_count = fn msg ->
                         {:read_discrete_inputs, lst} = msg.data
-                        {_, elems} = Enum.split(lst, -count)
-                        %{msg | data: {:read_discrete_inputs, elems}}
+                        %{msg | data: {:read_discrete_inputs, Enum.take(lst, count)}}
     end
     response = Modbus.Packet.read_discrete_inputs(address, count)
                |> Modbus.Tcp.wrap_packet(unit_id)
@@ -171,6 +179,13 @@ defmodule ExModbus.Client do
 
   def handle_call({:write_single_coil, %{unit_id: unit_id, start_address: address, state: data}}, _from, state) do
     response = Modbus.Packet.write_single_coil(address, data)
+               |> Modbus.Tcp.wrap_packet(unit_id)
+               |> send_and_rcv_packet(state)
+    Tuple.append response, state
+  end
+
+  def handle_call({:write_multiple_coils, %{unit_id: unit_id, start_address: address, state: data}}, _from, state) do
+    response = Modbus.Packet.write_multiple_coils(address, data)
                |> Modbus.Tcp.wrap_packet(unit_id)
                |> send_and_rcv_packet(state)
     Tuple.append response, state
