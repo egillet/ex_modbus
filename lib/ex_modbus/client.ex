@@ -15,6 +15,9 @@ defmodule ExModbus.Client do
   def start_link(ip = {_a, _b, _c, _d}, opts) do
     start_link(%{ip: ip}, opts)
   end
+  def start_link(args = %{ip: ip, port: port}, opts) do
+    Connection.start_link(__MODULE__, {ip, port, opts, (Map.get(args, :timeout) || @read_timeout)})
+  end
   def start_link(args = %{ip: _ip}, opts) do
     Connection.start_link(__MODULE__, args, opts)
   end
@@ -70,8 +73,8 @@ defmodule ExModbus.Client do
   end
 
   def connect(_, %{socket: nil, host: host} = s) do
-    Logger.debug "Connecting to #{inspect(host)}"
-    case :gen_tcp.connect(host, Modbus.Tcp.port, [:binary, {:active, false}], @read_timeout) do
+    Logger.debug "Connecting to #{inspect(s)}"
+    case :gen_tcp.connect(host, (Map.get(s, :port) || Modbus.Tcp.port), [:binary, {:active, false}], (Map.get(s, :timeout) || @read_timeout)) do
       {:ok, socket} ->
         Logger.debug "Connected to #{inspect(host)}"
         {:ok, %{s | socket: socket}}
@@ -80,7 +83,7 @@ defmodule ExModbus.Client do
     end
   end
 
-  def disconnect(info, %{socket: nil} = s), do: {:connect, :reconnect, s}
+  def disconnect(_info, %{socket: nil} = s), do: {:connect, :reconnect, s}
   def disconnect(info, %{socket: socket} = s) do
     :ok = :gen_tcp.close(socket)
     case info do
