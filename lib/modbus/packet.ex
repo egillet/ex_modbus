@@ -222,4 +222,75 @@ defmodule Modbus.Packet do
     {:error, "Unknown function code #{function_code}, pkt = #{inspect packet}"}
   end
 
+  @doc """
+  Parse a ModbusTCP response packet keeping the binary format instead of list
+  """
+  def parse_binary_response_packet(<<@read_input_registers, _byte_count, data::binary>>) do
+    {:ok, {:read_binary_input_registers, data}}
+  end
+
+  def parse_binary_response_packet(<<@read_input_registers_exception, exception>>) do
+    {:ok, {:read_binary_input_registers_exception, exception_code(exception)}}
+  end
+
+  def parse_binary_response_packet(<<@read_holding_registers, _byte_count, data::binary>>) do
+    {:ok, {:read_binary_holding_registers, data}}
+  end
+
+  def parse_binary_response_packet(<<@read_holding_registers_exception, exception>>) do
+    {:ok, {:read_binary_holding_registers_exception, exception_code(exception)}}
+  end
+
+  def parse_binary_response_packet(<<@read_coils, _byte_count, data::binary>>) do
+    {:ok, {:read_binary_coils, data}}
+  end
+
+  def parse_binary_response_packet(<<@read_coils_exception, exception>>) do
+    {:ok, {:read_binary_coils_exception, exception_code(exception)}}
+  end
+
+  def parse_binary_response_packet(<<@read_discrete_inputs, _byte_count, data::binary>>) do
+    {:ok, {:read_binary_discrete_inputs, data}}
+  end
+
+  def parse_binary_response_packet(<<@read_discrete_inputs_exception, exception>>) do
+    {:ok, {:read_binary_discrete_inputs_exception, exception_code(exception)}}
+  end
+
+  def parse_binary_response_packet(<<@write_single_coil, _::size(16), data::size(16)>>) do
+    {:ok, {:write_binary_single_coil, data}}
+  end
+
+  def parse_binary_response_packet(<<@write_single_coil_exception, exception>>) do
+    {:ok, {:write_binary_single_coil_exception, exception_code(exception)}}
+  end
+
+  def parse_binary_response_packet(<<@write_single_register, _address::size(16), data::size(16)-big>>) do
+    {:ok, {:write_binary_single_register, data}}
+  end
+
+  def parse_binary_response_packet(<<@write_single_register_exception, exception>>) do
+    {:ok, {:write_binary_single_register_exception, exception_code(exception)}}
+  end
+
+  def parse_binary_response_packet(<<@write_multiple_coils, _address::size(16), count::size(16)-big>>) do
+    {:ok, {:write_binary_multiple_coils, count}}
+  end
+
+  def parse_binary_response_packet(<<@write_multiple_coils_exception, exception>>) do
+    {:ok, {:write_binary_multiple_coils_exception, exception_code(exception)}}
+  end
+
+  def parse_binary_response_packet(<<@write_multiple_registers, _address::size(16), count::size(16)-big>>) do
+    {:ok, {:write_binary_multiple_registers, count}}
+  end
+
+  def parse_binary_response_packet(<<@write_multiple_registers_exception, exception>>) do
+    {:ok, {:write_binary_multiple_registers_exception, exception_code(exception)}}
+  end
+
+  def parse_binary_response_packet(packet = <<function_code, _byte_count, _data::binary>>) do
+    {:error, "Unknown function code #{function_code}, pkt = #{inspect packet}"}
+  end
+
 end

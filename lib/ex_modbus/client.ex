@@ -180,6 +180,36 @@ defmodule ExModbus.Client do
     Tuple.append response, state
   end
 
+
+  def handle_call({:read_binary_coils, %{unit_id: unit_id, start_address: address, count: count}}, _from, state) do
+    response = Modbus.Packet.read_coils(address, count)
+              |> Modbus.Tcp.wrap_packet(unit_id)
+              |> send_and_rcv_binary_packet(state)
+    Tuple.append response, state
+  end
+
+  def handle_call({:read_binary_discrete_inputs, %{unit_id: unit_id, start_address: address, count: count}}, _from, state) do
+    response = Modbus.Packet.read_discrete_inputs(address, count)
+               |> Modbus.Tcp.wrap_packet(unit_id)
+               |> send_and_rcv_binary_packet(state)
+    Tuple.append response, state
+  end
+
+  def handle_call({:read_binary_input_registers, %{unit_id: unit_id, start_address: address, count: count}}, _from, state) do
+    response = Modbus.Packet.read_input_registers(address, count)
+               |> Modbus.Tcp.wrap_packet(unit_id)
+               |> send_and_rcv_binary_packet(state)
+    Tuple.append response, state
+  end
+
+  def handle_call({:read_binary_holding_registers, %{unit_id: unit_id, start_address: address, count: count}}, _from, state) do
+    response = Modbus.Packet.read_holding_registers(address, count)
+               |> Modbus.Tcp.wrap_packet(unit_id)
+               |> send_and_rcv_binary_packet(state)
+    Tuple.append response, state
+  end
+
+
   def handle_call({:write_single_coil, %{unit_id: unit_id, start_address: address, state: data}}, _from, state) do
     response = Modbus.Packet.write_single_coil(address, data)
                |> Modbus.Tcp.wrap_packet(unit_id)
@@ -231,6 +261,24 @@ defmodule ExModbus.Client do
           {:ok, packet} ->
             unwrapped = Modbus.Tcp.unwrap_packet(packet)
             {:ok, data} = Modbus.Packet.parse_response_packet(unwrapped.packet)
+            {:reply, %{unit_id: unwrapped.unit_id, transaction_id: unwrapped.transaction_id, data: data}}
+          {:error, :timeout} = timeout ->
+            {:reply, timeout}
+          {:error, _} = error ->
+            {:disconnect, error, error}
+        end
+      {:error, _} = error ->
+        {:disconnect,  error, error}
+    end
+  end
+
+  defp send_and_rcv_binary_packet(msg, %{socket: socket}) do
+    case :gen_tcp.send(socket, msg) do
+      :ok ->
+        case :gen_tcp.recv(socket, 0, @read_timeout) do
+          {:ok, packet} ->
+            unwrapped = Modbus.Tcp.unwrap_packet(packet)
+            {:ok, data} = Modbus.Packet.parse_binary_response_packet(unwrapped.packet)
             {:reply, %{unit_id: unwrapped.unit_id, transaction_id: unwrapped.transaction_id, data: data}}
           {:error, :timeout} = timeout ->
             {:reply, timeout}
