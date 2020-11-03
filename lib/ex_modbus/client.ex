@@ -15,6 +15,9 @@ defmodule ExModbus.Client do
   def start_link(ip = {_a, _b, _c, _d}, opts) do
     start_link(%{ip: ip}, opts)
   end
+  def start_link(args = %{ip: ip, port: port, name: name}, opts) do
+    Connection.start_link(__MODULE__, {ip, port, opts, (Map.get(args, :timeout) || @read_timeout)}, name: name)
+  end
   def start_link(args = %{ip: ip, port: port}, opts) do
     Connection.start_link(__MODULE__, {ip, port, opts, (Map.get(args, :timeout) || @read_timeout)})
   end
