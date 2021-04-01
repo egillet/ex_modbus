@@ -7,6 +7,8 @@ defmodule ExModbus.Client do
   require Logger
 
   @read_timeout 4000
+  @backoff_initial 1000
+  @backoff_max 60_000
 
   # Public Interface
 
@@ -28,7 +30,6 @@ defmodule ExModbus.Client do
   def read_data(pid, unit_id, start_address, count) do
     Connection.call(pid, {:read_holding_registers, %{unit_id: unit_id, start_address: start_address, count: count}})
   end
-
 
   def read_coils(pid, unit_id, start_address, count) do
     Connection.call(pid, {:read_coils, %{unit_id: unit_id, start_address: start_address, count: count}})
@@ -67,20 +68,43 @@ defmodule ExModbus.Client do
     Connection.call(pid, {:write_multiple_registers, %{unit_id: unit_id, start_address: address, state: data}})
   end
 
-
-  def generic_call(pid, unit_id, {call, address, data}) do
+  def generic_call(pid, unit_id, args, retry \\ 1), do: generic_call_retry(pid, unit_id, args, retry)
+  
+  def generic_call_retry(pid, unit_id, {call, address, data}, retry) do
       case Connection.call(pid, {call, %{unit_id: unit_id, start_address: address, state: data}}) do
-          :closed -> :closed
-          %{data: {_type, res}} -> res
-           {:error, err} -> err
+          :closed -> 
+            if retry > 1 do
+              generic_call_retry(pid, unit_id, {call, address, data}, retry-1)
+            else
+              :closed
+            end
+          %{data: {_type, res}} -> 
+            res
+          {:error, err} -> 
+             if retry > 1 do
+               generic_call_retry(pid, unit_id, {call, address, data}, retry-1)
+             else
+               err
+             end
       end
   end
 
-  def generic_call(pid, unit_id, {call, address, count, transform}) do
+  def generic_call_retry(pid, unit_id, {call, address, count, transform}, retry) do
       case Connection.call(pid, {call, %{unit_id: unit_id, start_address: address, count: count}}) do
-          :closed -> :closed
-          %{data: {_type, data}} -> transform.(data)
-           {:error, err} -> err
+          :closed -> 
+            if retry > 1 do
+              generic_call_retry(pid, unit_id, {call, address, count, transform}, retry-1)
+            else
+              :closed
+            end
+          %{data: {_type, data}} -> 
+            transform.(data)
+          {:error, err} -> 
+            if retry > 1 do
+              generic_call_retry(pid, unit_id, {call, address, count, transform}, retry-1)
+            else
+              err
+            end
       end
   end
 
@@ -95,22 +119,28 @@ defmodule ExModbus.Client do
   def close(conn), do: Connection.call(conn, :close)
 
   def init({host, port, opts, timeout}) do
-    s = %{host: host, port: port, opts: opts, timeout: timeout, socket: nil}
+    s = %{host: host, port: port, opts: opts, timeout: timeout, socket: nil, backoff_delay: @backoff_initial}
     {:connect, :init, s}
   end
 
   def init(%{ip: ip}) do
-    {:connect, :init, %{socket: nil, host: ip}}
+    {:connect, :init, %{socket: nil, host: ip, backoff_delay: @backoff_initial}}
   end
 
-  def connect(_, %{socket: nil, host: host} = s) do
-    Logger.debug "Connecting to #{inspect(s)}"
+  def connect(arg, %{socket: nil, host: host} = s) do
+    Logger.debug "Connecting whith arg: #{inspect arg} to #{inspect(s)}"
     case :gen_tcp.connect(host, (Map.get(s, :port) || Modbus.Tcp.port), [:binary, {:active, false}], (Map.get(s, :timeout) || @read_timeout)) do
       {:ok, socket} ->
         Logger.debug "Connected to #{inspect(host)}"
-        {:ok, %{s | socket: socket}}
+        {:ok, %{s | socket: socket, backoff_delay: @backoff_initial}}
       {:error, _} ->
-        {:backoff, 1000, s}
+        backoff_delay = case arg do
+          :backoff -> 
+            min(@backoff_max, round(s.backoff_delay * 1.3))
+          _ -> 
+            s.backoff_delay
+        end
+        {:backoff, backoff_delay, %{s | backoff_delay: backoff_delay}}
     end
   end
 
@@ -250,6 +280,7 @@ defmodule ExModbus.Client do
   def handle_call(_, %{socket: nil} = s) do
     {:reply, {:error, :closed}, s}
   end
+  
   defp send_and_rcv_packet(_, %{socket: nil}) do
     {:disconnect, :closed, :closed}
   end
