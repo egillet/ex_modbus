@@ -21,7 +21,10 @@ defmodule ExModbus.Mixfile do
   #
   # Type `mix help compile.app` for more information
   def application do
-    [applications: [:logger, :nerves_uart]]
+    [
+      applications: [:logger, :nerves_uart],
+      extra_applications: [:connection]
+    ]
   end
 
   # Dependencies can be Hex packages:
@@ -33,7 +36,7 @@ defmodule ExModbus.Mixfile do
   #   {:mydep, git: "https://github.com/elixir-lang/mydep.git", tag: "0.1.0"}
   #
   # Type `mix help deps` for more examples and options
-  def deps do
+  defp deps do
     [{:nerves_uart, "~> 1.2"},
      {:connection, "~> 1.1"},
      {:ex_doc, "~> 0.24", only: :dev}]
