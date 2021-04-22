@@ -5,8 +5,6 @@ defmodule Modbus.Rtu do
 
   alias Modbus.Crc16
 
-  @slave_id 0x0001
-
   # reading functions
   @function_read_coil_status 0x01
   @function_read_input_status 0x02
@@ -28,68 +26,55 @@ defmodule Modbus.Rtu do
   end
 
   @doc """
-  Remove formatting around a "Read Coil Status" call (modbus func 01)
+  Remove formatting around:
+    - a "Read Coil Status" call (modbus func 01)
+    - a "Read Input Status" call (modbus func 02)
+    - a "Read Multiple Holding Registers" call (modbus func 03)
+    - a "Read Input Registers" call (modbus func 04)
+    - a "Force Single Coil" call (modbus func 05)
+    - a "Preset Single Register" call (modbus func 06)
+    - a "Force Multiple Coils" call (modbus func 15)
+    - a "Preset Multiple Registers" call (modbus func 16)
   """
   def unwrap_packet(<<slave_id::size(8), @function_read_coil_status, length::size(8), packet::binary>>) do
     packet_without_crc = Kernel.binary_part(packet, 0, length)
     %{content_length: length, slave_id: slave_id, packet: packet_without_crc}
   end
 
-  @doc """
-  Remove formatting around a "Read Input Status" call (modbus func 02)
-  """
   def unwrap_packet(<<slave_id::size(8), @function_read_input_status, length::size(8), packet::binary>>) do
     packet_without_crc = Kernel.binary_part(packet, 0, length)
     %{content_length: length, slave_id: slave_id, packet: packet_without_crc}
   end
 
-  @doc """
-  Remove formatting around a "Read Multiple Holding Registers" call (modbus func 03)
-  """
   def unwrap_packet(<<slave_id::size(8), @function_read_holding_registers, _length::size(8), _rest_of_packet::binary>>=packet) do
     length = byte_size(packet)-3 # minus 3 to remove slave ID and CRC16
     packet_without_crc = Kernel.binary_part(packet, 1, length)
     %{content_length: length, slave_id: slave_id, packet: packet_without_crc}
   end
 
-  @doc """
-  Remove formatting around a "Read Input Registers" call (modbus func 04)
-  """
   def unwrap_packet(<<slave_id::size(8), @function_read_input_registers, length::size(8), packet::binary>>) do
     packet_without_crc = Kernel.binary_part(packet, 0, length) # +2 because this includes the command and length bytes, plus our data length
     %{content_length: length, slave_id: slave_id, packet: packet_without_crc}
   end
 
-  @doc """
-  Remove formatting around a "Force Single Coil" call (modbus func 05)
-  """
   def unwrap_packet(<<slave_id::size(8), @function_force_single_coil, _rest_of_packet::binary>>=packet) do
     length = byte_size(packet)-3 # minus 3 to remove slave ID and CRC16
     packet_without_crc = Kernel.binary_part(packet, 1, length) # -2 because to remove length of the CRC16
     %{content_length: length, slave_id: slave_id, packet: packet_without_crc}
   end
 
-  @doc """
-  Remove formatting around a "Preset Single Register" call (modbus func 06)
-  """
   def unwrap_packet(<<slave_id::size(8), @function_preset_single_register, _rest_of_packet::binary>>=packet) do
     length = byte_size(packet)-3 # minus 3 to remove slave ID and CRC16
     packet_without_crc = Kernel.binary_part(packet, 1, length) # -2 because to remove length of the CRC16
     %{content_length: length, slave_id: slave_id, packet: packet_without_crc}
   end
 
-  @doc """
-  Remove formatting around a "Force Multiple Coils" call (modbus func 15)
-  """
   def unwrap_packet(<<slave_id::size(8), @function_force_multiple_coils, _rest_of_packet::binary>>=packet) do
     length = byte_size(packet)-3 # minus 3 to remove slave ID and CRC16
     packet_without_crc = Kernel.binary_part(packet, 1, length) # -2 because to remove length of the CRC16
     %{content_length: length, slave_id: slave_id, packet: packet_without_crc}
   end
 
-  @doc """
-  Remove formatting around a "Preset Multiple Registers" call (modbus func 16)
-  """
   def unwrap_packet(<<slave_id::size(8), @function_preset_multiple_registers, _rest_of_packet::binary>>=packet) do
     length = byte_size(packet)-3 # minus 3 to remove slave ID and CRC16
     packet_without_crc = Kernel.binary_part(packet, 1, length)

@@ -281,11 +281,7 @@ defmodule ExModbus.Client do
     {:reply, {:error, :closed}, s}
   end
   
-  defp send_and_rcv_packet(_, %{socket: nil}) do
-    {:disconnect, :closed, :closed}
-  end
-
-  defp send_and_rcv_packet(msg, %{socket: nil}), do: {:reply, {:error, "not connected"}}
+  defp send_and_rcv_packet(_, %{socket: nil}), do: {:disconnect, :closed, :closed}
   defp send_and_rcv_packet(msg, %{socket: socket}) do
     case :gen_tcp.send(socket, msg) do
       :ok ->
@@ -304,7 +300,7 @@ defmodule ExModbus.Client do
     end
   end
 
-  defp send_and_rcv_binary_packet(msg, %{socket: nil}), do: {:reply, {:error, "not connected"}}
+  defp send_and_rcv_binary_packet(_msg, %{socket: nil}), do: {:disconnect, :closed, :closed}
   defp send_and_rcv_binary_packet(msg, %{socket: socket}) do
     case :gen_tcp.send(socket, msg) do
       :ok ->
