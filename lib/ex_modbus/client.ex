@@ -124,7 +124,7 @@ defmodule ExModbus.Client do
           host: host, 
           port: port, 
           opts: opts, 
-          timeout: timeout,
+          timeout: timeout || @read_timeout,
           backoff_delay: @backoff_initial, 
           from: from
         }
@@ -140,7 +140,7 @@ defmodule ExModbus.Client do
           host: ip, 
           port: Map.get(args, :port,  Modbus.Tcp.port),
           opts:  Map.get(args, :opts, []),
-          timeout:  Map.get(args, :timepout, @read_timeout),
+          timeout:  Map.get(args, :timeout) || @read_timeout,
           backoff_delay: @backoff_initial, 
           from: Map.get(args, :from)
        }
