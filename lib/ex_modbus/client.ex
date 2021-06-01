@@ -8,7 +8,7 @@ defmodule ExModbus.Client do
 
   @read_timeout 4000
   @backoff_initial 1000
-  @backoff_max 60_000
+  @backoff_max 30_000
 
   # Public Interface
 
@@ -18,10 +18,10 @@ defmodule ExModbus.Client do
     start_link(%{ip: ip}, opts)
   end
   def start_link(args = %{ip: ip, port: port, name: name}, opts) do
-    Connection.start_link(__MODULE__, {ip, port, opts, (Map.get(args, :timeout) || @read_timeout)}, name: name)
+    Connection.start_link(__MODULE__, {ip, port, opts, Map.get(args, :timeout, @read_timeout), Map.get(args, :from)}, name: name)
   end
   def start_link(args = %{ip: ip, port: port}, opts) do
-    Connection.start_link(__MODULE__, {ip, port, opts, (Map.get(args, :timeout) || @read_timeout)})
+    Connection.start_link(__MODULE__, {ip, port, opts, Map.get(args, :timeout, @read_timeout), Map.get(args, :from) })
   end
   def start_link(args = %{ip: _ip}, opts) do
     Connection.start_link(__MODULE__, args, opts)
@@ -118,27 +118,50 @@ defmodule ExModbus.Client do
 
   def close(conn), do: Connection.call(conn, :close)
 
-  def init({host, port, opts, timeout}) do
-    s = %{host: host, port: port, opts: opts, timeout: timeout, socket: nil, backoff_delay: @backoff_initial}
+  def init({host, port, opts, timeout, from}) do
+    s = %{
+          socket: nil,
+          host: host, 
+          port: port, 
+          opts: opts, 
+          timeout: timeout,
+          backoff_delay: @backoff_initial, 
+          from: from
+        }
     {:connect, :init, s}
   end
 
-  def init(%{ip: ip}) do
-    {:connect, :init, %{socket: nil, host: ip, backoff_delay: @backoff_initial}}
+  def init(%{ip: ip}=args) do
+    {
+      :connect, 
+      :init, 
+      %{
+          socket: nil, 
+          host: ip, 
+          port: Map.get(args, :port,  Modbus.Tcp.port),
+          opts:  Map.get(args, :opts, []),
+          timeout:  Map.get(args, :timepout, @read_timeout),
+          backoff_delay: @backoff_initial, 
+          from: Map.get(args, :from)
+       }
+    }
   end
 
-  def connect(arg, %{socket: nil, host: host} = s) do
+  def connect(arg, %{socket: nil, host: host, port: port, timeout: timeout, backoff_delay: backoff_delay, from: from}=s) do
     Logger.debug "Connecting whith arg: #{inspect arg} to #{inspect(s)}"
-    case :gen_tcp.connect(host, (Map.get(s, :port) || Modbus.Tcp.port), [:binary, {:active, false}], (Map.get(s, :timeout) || @read_timeout)) do
+    case :gen_tcp.connect(host, port, [:binary, {:active, false}], timeout) do
       {:ok, socket} ->
         Logger.debug "Connected to #{inspect(host)}"
+        unless is_nil(from) do
+          Kernel.send(from, :socket_connected)
+        end
         {:ok, %{s | socket: socket, backoff_delay: @backoff_initial}}
       {:error, _} ->
         backoff_delay = case arg do
           :backoff -> 
-            min(@backoff_max, round(s.backoff_delay * 1.3))
+            min(@backoff_max, round(backoff_delay * 1.3))
           _ -> 
-            s.backoff_delay
+            backoff_delay
         end
         {:backoff, backoff_delay, %{s | backoff_delay: backoff_delay}}
     end
@@ -155,6 +178,9 @@ defmodule ExModbus.Client do
       {:error, reason} ->
         reason = :inet.format_error(reason)
         :error_logger.format("Connection error: ~s~n", [reason])
+    end
+    unless is_nil(s.from) do
+      Kernel.send(s.from, :socket_disconnected)
     end
     {:connect, :reconnect, %{s | socket: nil}}
   end
